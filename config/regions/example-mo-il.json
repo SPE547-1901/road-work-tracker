@@ -1,0 +1,92 @@
+{
+  "_about": "Example: two state DOTs read through their own map services (MoDOT's traveler map and IDOT's Getting Around Illinois layers). The counties and district below are sample values; change them to cover your area, or use 'python -m tracker init' to start from your state's WZDx feed instead.",
+  "id": "example-mo-il",
+  "title": "Road Work Tracker",
+  "subtitle": "Example: MoDOT and IDOT sources",
+  "timezone": "America/Chicago",
+  "bbox": [
+    -91.65,
+    37.7,
+    -89.05,
+    39.55
+  ],
+  "home": [
+    -90.75,
+    38.35,
+    -89.8,
+    38.95
+  ],
+  "map": {
+    "tiles": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "attribution": "© OpenStreetMap contributors",
+    "maxZoom": 18
+  },
+  "newsTitle": "Latest agency news",
+  "footer": "Work zone data from MoDOT and IDOT, refreshed on a schedule. Check the agency sites before you travel.",
+  "sources": [
+    {
+      "id": "modot",
+      "type": "modot",
+      "label": "MoDOT",
+      "state": "Missouri",
+      "color": "#1e56a0",
+      "darkColor": "#74a6ea",
+      "mapName": "MoDOT traveler map",
+      "counties": [
+        "FRANKLIN",
+        "JEFFERSON",
+        "LINCOLN",
+        "ST. CHARLES",
+        "ST. LOUIS",
+        "ST. LOUIS CITY",
+        "WARREN"
+      ],
+      "_about": "Sample counties; list MoDOT COUNTY_NAME values for your area, or [] for all of Missouri."
+    },
+    {
+      "id": "idot",
+      "type": "idot",
+      "label": "IDOT",
+      "state": "Illinois",
+      "color": "#0d7566",
+      "darkColor": "#4cc3ae",
+      "mapName": "IDOT traveler map",
+      "district": 8,
+      "liveReports": true,
+      "roadsLayer": "https://services2.arcgis.com/aIrBD8yn1TDTEXoz/ArcGIS/rest/services/D8_Roads_2017/FeatureServer/0",
+      "bridgeRoutes": {
+        "POPLAR ST BRG": "I-55/64",
+        "POPLAR STREET BRIDGE": "I-55/64"
+      },
+      "_about": "Sample district (8); set 1-9. roadsLayer and bridgeRoutes are District 8 extras and can be removed."
+    }
+  ],
+  "news": {
+    "feeds": [
+      {
+        "agency": "IDOT",
+        "url": "https://illinois-department-of-transportation.prezly.com/feed.rss",
+        "keywords": [
+          "District 8",
+          "Madison County",
+          "St. Clair County",
+          "Monroe County",
+          "Randolph County",
+          "Clinton County",
+          "Washington County",
+          "Bond County",
+          "Marion County",
+          "Jersey County",
+          "Greene County",
+          "Calhoun County",
+          "Macoupin County",
+          "Metro East"
+        ]
+      }
+    ],
+    "file": "config/news/example-mo-il.json",
+    "maxAgeDays": 30
+  },
+  "reports": "config/reports/example-mo-il.json",
+  "endedKeepDays": 14
+}

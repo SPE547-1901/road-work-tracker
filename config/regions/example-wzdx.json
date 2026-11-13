@@ -1,0 +1,59 @@
+{
+  "_about": "Example: a metro area that spans two states, read from both state DOTs' WZDx feeds (no API keys needed). Made with: python -m tracker init --states MO,KS --id example-wzdx --bbox=-95.10,38.70,-94.20,39.45",
+  "id": "example-wzdx",
+  "title": "Kansas City Road Work",
+  "subtitle": "Missouri DOT · Kansas DOT",
+  "timezone": "America/Chicago",
+  "bbox": [
+    -95.1,
+    38.7,
+    -94.2,
+    39.45
+  ],
+  "home": [
+    -94.85,
+    38.88,
+    -94.4,
+    39.22
+  ],
+  "map": {
+    "tiles": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "attribution": "© OpenStreetMap contributors",
+    "maxZoom": 18
+  },
+  "newsTitle": "Latest agency news",
+  "footer": "Work zone data from the agencies listed above, refreshed on a schedule. Check the agency sites before you travel.",
+  "sources": [
+    {
+      "id": "missouri-dot",
+      "type": "wzdx",
+      "label": "Missouri DOT",
+      "color": "#1e56a0",
+      "url": "https://traveler.modot.org/timconfig/feed/desktop/mo_wzdx.json",
+      "eventTypes": [
+        "work-zone"
+      ],
+      "state": "Missouri",
+      "infoUrl": "https://traveler.modot.org/map/",
+      "mapName": "MoDOT traveler map"
+    },
+    {
+      "id": "kansas-dot",
+      "type": "wzdx",
+      "label": "Kansas DOT",
+      "color": "#0d7566",
+      "url": "https://ks.carsprogram.org/carsapi_v1/api/wzdx",
+      "eventTypes": [
+        "work-zone"
+      ],
+      "state": "Kansas",
+      "infoUrl": "https://www.kandrive.gov/",
+      "mapName": "KanDrive map"
+    }
+  ],
+  "news": {
+    "feeds": [],
+    "file": "config/news/example-wzdx.json"
+  },
+  "reports": "config/reports/example-wzdx.json"
+}

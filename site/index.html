@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Road Work Tracker</title>
+<meta name="description" content="Current road construction and closures from state and local transportation agencies, on a map.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 29 16 16 29 3 16Z' fill='%23d9570b'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@600;800&family=Overpass+Mono:wght@400;600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky sign-band header, a district-wide overview map, then a
+   filterable grid of project cards, each with its own map. Work-zone orange
+   is the single accent; state hues only mark which agency owns a zone. */
+:root {
+  --bg: #eceff2;
+  --surface: #fafbfc;
+  --sunken: #e2e6ea;
+  --ink: #171c22;
+  --muted: #586370;
+  --line: #cdd3da;
+  --cone: #d9570b;
+  --cone-ink: #ffffff;
+  --cone-soft: #fbe3d3;
+  --mo: #1e56a0;
+  --il: #0d7566;
+  --closed: #b3261e;
+  --closed-soft: #f7dcd9;
+  --plan: #6b5aa8;
+  --report: #a8650a;
+  --report-soft: #f8e7cc;
+  --halo: #ffffff;
+  --focus: #1e56a0;
+  --font-display: "Overpass", "Highway Gothic", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "Overpass Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161b; --surface: #1a1f26; --sunken: #232a32; --ink: #e6e9ed; --muted: #9aa5b1;
+    --line: #2e3640; --cone: #ff8638; --cone-ink: #1a1006; --cone-soft: #3a2414; --mo: #74a6ea;
+    --il: #4cc3ae; --closed: #ff6b60; --closed-soft: #3d1c1a; --plan: #a998ea; --report: #f0b545; --report-soft: #3a2c12; --halo: #12161b;
+    --focus: #74a6ea; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161b; --surface: #1a1f26; --sunken: #232a32; --ink: #e6e9ed; --muted: #9aa5b1;
+  --line: #2e3640; --cone: #ff8638; --cone-ink: #1a1006; --cone-soft: #3a2414; --mo: #74a6ea;
+  --il: #4cc3ae; --closed: #ff6b60; --closed-soft: #3d1c1a; --plan: #a998ea; --report: #f0b545; --report-soft: #3a2c12; --halo: #12161b;
+  --focus: #74a6ea; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+a { color: var(--mo); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+.num, time, .mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+/* header */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--surface); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 14px; padding-block: 10px; flex-wrap: wrap; }
+.mark { width: 30px; height: 30px; flex: none; display: grid; place-items: center; }
+.mark span { width: 21px; height: 21px; background: var(--cone); transform: rotate(45deg); border-radius: 3px; box-shadow: inset 0 0 0 2px var(--surface), 0 0 0 1.5px var(--cone); }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand h1 { font-size: 21px; font-weight: 800; letter-spacing: .01em; }
+.brand p { margin: 0; font-size: 12.5px; color: var(--muted); }
+.fresh { margin-left: auto; font-size: 12.5px; color: var(--muted); text-align: right; }
+.fresh b { color: var(--ink); font-weight: 600; }
+.fresh .warn { color: var(--closed); }
+
+/* stat strip */
+.stats { display: flex; flex-wrap: wrap; gap: 8px; padding-block: 18px 10px; }
+.stat { display: flex; align-items: baseline; gap: 8px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; font: inherit; color: inherit; }
+.stat:hover { border-color: var(--muted); }
+.stat[aria-pressed="true"] { border-color: var(--cone); box-shadow: inset 0 0 0 1px var(--cone); }
+.stat .num { font-size: 22px; font-weight: 600; font-family: var(--font-display); }
+.stat .lab { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.stat.closure .num { color: var(--closed); }
+.stat.active .num { color: var(--cone); }
+
+/* maps */
+.map { position: relative; background: var(--sunken); border-radius: var(--r); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.map svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+.map svg.dragging { cursor: grabbing; }
+.map .ctrls { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.map .ctrls button { width: 30px; height: 30px; border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 16px/1 var(--font-body); cursor: pointer; display: grid; place-items: center; }
+.map .attr { position: absolute; left: 0; bottom: 0; padding: 1px 6px; font-size: 10px; color: #333; background: rgba(255,255,255,.72); border-top-right-radius: 4px; }
+.map .pending { position: absolute; inset: auto 8px 22px 8px; font-size: 12px; color: var(--muted); text-align: center; }
+.overview { margin-top: 6px; aspect-ratio: 16 / 7; max-width: 100%; }
+@media (max-width: 720px) { .overview { aspect-ratio: 1 / 1; } }
+/* On touch screens the area map lets the page scroll past it until it is tapped; then it takes the gestures. */
+.map.overview { touch-action: pan-y; }
+.map.overview.live { touch-action: none; outline: 2px solid var(--focus); outline-offset: -2px; }
+.map .gate { display: none; position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); white-space: nowrap; pointer-events: none; padding: 5px 12px; border-radius: 999px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+@media (pointer: coarse) { .map.overview:not(.live) .gate { display: block; } }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--muted); padding-block: 8px 0; }
+.legend i { display: inline-block; width: 22px; height: 0; border-top: 4px solid; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.legend i.dash { border-top-style: dashed; }
+.legend i.dot { border-top-style: dotted; }
+.tag.report { background: var(--report-soft); border-color: var(--report); color: var(--report); }
+.tag.count { color: var(--muted); }
+.srcs { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 9px; }
+.srcs h4 { margin: 0; font: 600 11.5px var(--font-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.src { display: grid; gap: 2px; font-size: 13.5px; }
+.src .k { font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.src a { color: var(--ink); text-decoration: none; }
+.src a:hover { text-decoration: underline; }
+.src .vs { font-size: 12.5px; color: var(--report); }
+.rel { font-size: 13px; color: var(--muted); }
+.rel button { font: inherit; color: var(--mo); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 6px 9px; font-size: 12.5px; max-width: 260px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.tip b { display: block; font-family: var(--font-display); font-size: 14px; }
+
+section.block { padding-block: 22px 0; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sec-head h2 { font-size: 19px; font-weight: 800; }
+.sec-head p { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* news */
+.news { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 10px; margin-top: 10px; }
+.news .item { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); color: var(--ink); min-width: 0; }
+.news .item.other .t { font-weight: 500; }
+.news a.t { color: var(--ink); text-decoration: none; }
+.news a.t:hover { text-decoration: underline; }
+.news .vs { font-size: 12.5px; color: var(--report); }
+.news .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.chip { font: 600 12px/1 var(--font-body); padding: 5px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--sunken); color: var(--ink); cursor: pointer; }
+.chip:hover { border-color: var(--muted); }
+.more { margin-top: 10px; font: 500 13.5px var(--font-body); color: var(--mo); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.tag.new { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+details.zones { border-top: 1px solid var(--line); padding-top: 10px; font-size: 13.5px; }
+details.zones summary { cursor: pointer; font: 600 11.5px var(--font-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+details.zones ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.news .meta { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.news .t { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.news .s { font-size: 13px; color: var(--muted); }
+
+/* filters */
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-block: 14px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--hdr, 56px)); z-index: 5; background: var(--bg); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 7px 12px; font: 500 13.5px var(--font-body); color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.filters select, .filters input { font: 14px var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 7px 10px; min-width: 0; }
+.filters input { flex: 1 1 180px; }
+.count { font-size: 13px; color: var(--muted); margin-left: auto; }
+
+/* cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; padding-bottom: 40px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; scroll-margin-top: 140px; }
+.card.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 3px var(--cone); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.card .map { aspect-ratio: 16 / 10; border-radius: 0; touch-action: pan-y; }
+.card .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag { font: 600 11.5px/1 var(--font-body); text-transform: uppercase; letter-spacing: .06em; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.tag.active { background: var(--cone); border-color: var(--cone); color: var(--cone-ink); }
+.tag.upcoming { color: var(--plan); border-color: currentColor; border-style: dashed; }
+.tag.ended { color: var(--muted); }
+.tag.closed { background: var(--closed-soft); border-color: var(--closed); color: var(--closed); }
+.plate { display: inline-flex; align-items: center; gap: 8px; }
+.route { font: 800 15px/1 var(--font-display); padding: 5px 7px 3px; border: 2px solid var(--ink); border-radius: 5px; letter-spacing: .02em; white-space: nowrap; }
+.card h3 { font-size: 18px; font-weight: 800; }
+.where { font-size: 13.5px; color: var(--muted); margin: 0; }
+.desc { margin: 0; font-size: 14.5px; }
+.dates { display: grid; gap: 6px; }
+.dates .row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.dates .row span { color: var(--muted); }
+.bar { position: relative; height: 8px; background: var(--sunken); border-radius: 4px; overflow: visible; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--cone); border-radius: 4px; }
+.bar .fill.done { background: var(--muted); }
+.bar .today { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--ink); border-radius: 1px; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13.5px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; margin-top: auto; padding-top: 4px; }
+.links button { font: inherit; color: var(--mo); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+
+.empty { grid-column: 1 / -1; padding: 40px 20px; text-align: center; background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+.empty h3 { color: var(--ink); font-size: 18px; margin-bottom: 6px; }
+.empty p { max-width: 52ch; margin: 0 auto; }
+footer { padding-block: 10px 30px; color: var(--muted); font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { .card.flash { animation: none; outline: 3px solid var(--cone); } }
+.tag.ag { color: var(--ag); border-color: currentColor; }
+.map .attr a { color: inherit; }
+html, body { margin: 0; }
+</style>
+<style id="agency-colors"></style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><span></span></div>
+      <div>
+        <h1 id="r-title">Road Work</h1>
+        <p id="r-sub"></p>
+      </div>
+    </div>
+    <div class="fresh" id="fresh">Connecting…</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="stats" id="stats" role="group" aria-label="Quick filters"></div>
+
+  <section aria-labelledby="ov-h">
+    <div class="sec-head">
+      <h2 id="ov-h">All work zones</h2>
+      <p>Drag to pan, scroll or pinch to zoom. Select a zone to open its project.</p>
+    </div>
+    <div class="map overview" id="overview"></div>
+    <div class="legend" id="legend">
+      <span><i style="color:var(--closed)"></i>Road closed</span>
+      <span><i class="dash" style="color:var(--plan)"></i>Starts later</span>
+      <span><i class="dot" style="color:var(--report)"></i>Not in agency feeds (news only)</span>
+    </div>
+  </section>
+
+  <section class="block" id="news-sec" hidden aria-labelledby="news-h">
+    <div class="sec-head">
+      <h2 id="news-h">Latest agency news</h2>
+      <p id="news-checked"></p>
+    </div>
+    <div class="news" id="news"></div>
+    <button type="button" class="more" id="news-more" hidden></button>
+  </section>
+
+  <section class="block" aria-labelledby="list-h">
+    <div class="sec-head"><h2 id="list-h">Projects</h2></div>
+    <div class="filters" id="filters">
+      <div class="seg" role="group" aria-label="Agency" id="f-agency" hidden></div>
+      <select id="f-status" aria-label="Status">
+        <option value="current">Active and upcoming</option>
+        <option value="active">Active now</option>
+        <option value="upcoming">Starting later</option>
+        <option value="closed">Road closures</option>
+        <option value="new">New this week</option>
+        <option value="week-start">Starting this week</option>
+        <option value="week-end">Ending this week</option>
+        <option value="ended">Recently finished</option>
+        <option value="all">Everything</option>
+      </select>
+      <select id="f-county" aria-label="County"><option value="">All counties</option></select>
+      <input id="f-q" type="search" placeholder="Road, town or keyword" aria-label="Search projects">
+      <select id="f-sort" aria-label="Sort">
+        <option value="end">Ending soonest</option>
+        <option value="start">Starting soonest</option>
+        <option value="impact">Biggest impact</option>
+        <option value="route">Route</option>
+      </select>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="grid" id="grid">
+      <div class="empty">
+        <h3>Loading projects</h3>
+        <p>Work zones appear here once the data file loads.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="wrap">
+  <p id="r-footer">Work zone data from state and local agencies, refreshed on a schedule. Check the agency sites before you travel.</p>
+  <p id="r-credit"></p>
+</footer>
+
+<script>
+(() => {
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return el;
+}
+const SVGNS = "http://www.w3.org/2000/svg";
+function s(tag, attrs) { const el = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v); return el; }
+
+// ---------- dates
+const TODAY = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); })();
+const DAY = 86400000;
+function pd(iso) { if (!iso) return null; const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); }
+const fmtD = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+const fmtShort = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const fmtTime = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+function days(a, b) { return Math.round((b - a) / DAY); }
+function statusOf(p) {
+  if (p.status === "ended") return "ended";
+  const st = pd(p.startDate), en = pd(p.endDate);
+  if (st && st > TODAY) return "upcoming";
+  if (en && en < TODAY && !p.stillReported) return "ended";
+  return "active";
+}
+const weekEnd = new Date(TODAY.getTime() + 7 * DAY);
+// first listed by a feed within the last week (and not already over)
+function isNew(p) {
+  const t = p.firstSeen ? new Date(p.firstSeen).getTime() : NaN, first = state.meta?.firstRefresh ? new Date(state.meta.firstRefresh).getTime() : 0;
+  return t > first && Date.now() - t < 7 * DAY && statusOf(p) !== "ended";
+}
+function inWeek(d) { return d && d >= TODAY && d <= weekEnd; }
+
+// ---------- mercator
+const R = 6378137;
+function merc(lon, lat) { return [R * lon * Math.PI / 180, R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2))]; }
+
+// ---------- map view
+const RO = new ResizeObserver(es => { for (const e of es) e.target._mv?.apply(); });
+// Street-map tiles from the provider in data/region.json (256 px web-mercator XYZ tiles).
+const WORLD = 2 * Math.PI * R;
+let TILE = { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "© OpenStreetMap contributors", maxZoom: 18, subdomains: "abc" };
+function tileUrl(z, x, y) {
+  const n = 2 ** z, xx = ((x % n) + n) % n, sub = TILE.subdomains || "abc";
+  return TILE.url.replace("{z}", z).replace("{x}", xx).replace("{y}", y)
+    .replace("{s}", sub[(xx + y) % sub.length]).replace("{r}", devicePixelRatio > 1.5 ? "@2x" : "");
+}
+class MapView {
+  constructor(host, opts) {
+    this.host = host; this.o = opts;
+    host.textContent = "";
+    this.svg = s("svg", { preserveAspectRatio: "xMidYMid slice", role: "img", "aria-label": opts.label || "Map" });
+    this.gTiles = s("g"); this.gFeat = s("g"); this.gMark = s("g");
+    this.svg.append(this.gTiles, this.gFeat, this.gMark);
+    this.tileEls = new Map(); this.levelGroups = new Map();
+    host.append(this.svg);
+    const ex = opts.extent; // mercator [x0,y0,x1,y1]
+    this.home = { x: ex[0], y: -ex[3], w: ex[2] - ex[0], h: ex[3] - ex[1] };
+    this.bounds = opts.bounds || ex;
+    this.v = { ...this.home };
+    const attr = h("div", { class: "attr" });
+    attr.innerHTML = TILE.attribution;  // from the site's own config: may contain a link
+    host.append(attr);
+    this.marks = [];
+    this.drawFeatures(opts.features || []);
+    const ctrls = h("div", { class: "ctrls" },
+      h("button", { type: "button", "aria-label": "Zoom in", text: "+", onclick: () => this.zoomBy(0.6) }),
+      h("button", { type: "button", "aria-label": "Zoom out", text: "−", onclick: () => this.zoomBy(1 / 0.6) }),
+      h("button", { type: "button", "aria-label": "Reset view", text: "⟲", onclick: () => this.reset() }));
+    host.append(ctrls);
+    if (opts.gate) {
+      host.append(h("div", { class: "gate", text: "Tap the map to move it" }));
+      document.addEventListener("pointerdown", e => { if (!host.contains(e.target)) host.classList.remove("live"); });
+    }
+    this.bind();
+    host._mv = this;
+    RO.observe(host);
+    this.apply();
+  }
+  drawFeatures(feats) {
+    this.gFeat.textContent = ""; this.gMark.textContent = ""; this.marks = [];
+    for (const f of feats) {
+      const grp = s("g", { "data-id": f.id || "" });
+      if (f.onClick) { grp.style.cursor = "pointer"; grp.addEventListener("click", e => { if (!this.moved) f.onClick(e); }); }
+      if (f.onHover) { grp.addEventListener("pointerenter", e => f.onHover(e, true)); grp.addEventListener("pointerleave", e => f.onHover(e, false)); }
+      for (const sg of f.segments) {
+        if (sg.type === "line") {
+          const d = sg.coords.map((c, i) => { const [x, y] = merc(c[0], c[1]); return (i ? "L" : "M") + x.toFixed(1) + " " + (-y).toFixed(1); }).join("");
+          const common = { d, fill: "none", "stroke-linecap": "round", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" };
+          grp.append(s("path", { ...common, stroke: "var(--halo)", "stroke-width": f.width + 4, "stroke-opacity": ".9" }));
+          grp.append(s("path", { ...common, stroke: f.color, "stroke-width": f.width, "stroke-dasharray": f.dash === "dot" ? "1.5 6" : (f.dash ? "6 5" : "none") }));
+          grp.append(s("path", { ...common, stroke: "transparent", "stroke-width": Math.max(16, f.width + 12) }));
+          this.gFeat.append(grp);
+        } else {
+          const [x, y] = merc(sg.coord[0], sg.coord[1]);
+          const m = s("g", { "data-x": x, "data-y": -y });
+          const sz = f.mark || 7;
+          m.append(s("rect", { x: -sz, y: -sz, width: sz * 2, height: sz * 2, rx: 1.5, transform: "rotate(45)", fill: f.color, stroke: "var(--halo)", "stroke-width": 2 }));
+          grp.append(m); this.marks.push(m);
+          this.gMark.append(grp);
+        }
+      }
+    }
+    this.apply();
+  }
+  scale() { const r = this.host.getBoundingClientRect(); return Math.max(r.width / this.v.w, r.height / this.v.h) || 1; }
+  apply() {
+    const v = this.v;
+    this.svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+    const k = 1 / this.scale();
+    for (const m of this.marks) m.setAttribute("transform", `translate(${m.dataset.x} ${m.dataset.y}) scale(${k})`);
+    if (!this.refineQueued) {
+      this.refineQueued = true;
+      requestAnimationFrame(() => { this.refineQueued = false; this.refine(); });
+    }
+  }
+  // Load tiles for the visible area at the zoom that suits the current scale. Coarser levels stay underneath
+  // as a backdrop while the sharper tiles arrive; levels far from the current one are dropped.
+  refine() {
+    const v = this.v, mpx = 1 / this.scale(), H = WORLD / 2;
+    const z = Math.max(0, Math.min(TILE.maxZoom || 18, Math.ceil(Math.log2(WORLD / (256 * mpx)) - 0.25)));
+    for (const [lz, g] of this.levelGroups) {
+      if (lz > z || lz < z - 3) { g.remove(); this.levelGroups.delete(lz); for (const k of [...this.tileEls.keys()]) if (k.startsWith(lz + "/")) this.tileEls.delete(k); }
+    }
+    let g = this.levelGroups.get(z);
+    if (!g) {
+      g = s("g"); this.levelGroups.set(z, g);
+      const after = [...this.gTiles.children].find(c => +c.dataset.z > z);
+      g.dataset.z = z; this.gTiles.insertBefore(g, after || null);
+    }
+    const S = WORLD / 2 ** z, n = 2 ** z;
+    const x0 = Math.floor((v.x + H) / S), x1 = Math.floor((v.x + v.w + H) / S);
+    const y0 = Math.max(0, Math.floor((v.y + H) / S)), y1 = Math.min(n - 1, Math.floor((v.y + v.h + H) / S));
+    let added = 0;
+    for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1 && added < 120; ty++) {
+      const key = `${z}/${tx}/${ty}`;
+      if (this.tileEls.has(key)) continue;
+      const img = s("image", { href: tileUrl(z, tx, ty), x: tx * S - H, y: ty * S - H, width: S * 1.002, height: S * 1.002, preserveAspectRatio: "none" });
+      img.addEventListener("error", () => img.remove(), { once: true });
+      this.tileEls.set(key, img); g.append(img); added++;
+    }
+  }
+  clamp() {
+    const b = this.bounds, v = this.v;
+    const maxW = (b[2] - b[0]), minW = this.home.w / (this.o.maxZoom || 10);
+    if (v.w > maxW) { const r = maxW / v.w; v.w *= r; v.h *= r; }
+    if (v.w < minW) { const r = minW / v.w; v.w *= r; v.h *= r; }
+    const cx = Math.min(Math.max(v.x + v.w / 2, b[0]), b[2]);
+    const cy = Math.min(Math.max(v.y + v.h / 2, -b[3]), -b[1]);
+    v.x = cx - v.w / 2; v.y = cy - v.h / 2;
+  }
+  zoomAt(f, px, py) {
+    const r = this.host.getBoundingClientRect(), k = this.scale();
+    // svg content is centered under slice; convert screen px to world
+    const offX = (r.width - this.v.w * k) / 2, offY = (r.height - this.v.h * k) / 2;
+    const wx = this.v.x + (px - offX) / k, wy = this.v.y + (py - offY) / k;
+    this.v.w *= f; this.v.h *= f;
+    this.v.x = wx - (wx - this.v.x) * f; this.v.y = wy - (wy - this.v.y) * f;
+    this.clamp(); this.apply();
+  }
+  zoomBy(f) { const r = this.host.getBoundingClientRect(); this.zoomAt(f, r.width / 2, r.height / 2); }
+  reset() { this.v = { ...this.home }; this.apply(); }
+  fit(ext, pad = 0.3) {
+    const w = Math.max(ext[2] - ext[0], 1200), hh = Math.max(ext[3] - ext[1], 800);
+    const cx = (ext[0] + ext[2]) / 2, cy = -(ext[1] + ext[3]) / 2;
+    const r = this.host.getBoundingClientRect(), aspect = (r.width / r.height) || this.home.w / this.home.h;
+    let vw = w * (1 + 2 * pad), vh = hh * (1 + 2 * pad);
+    if (vw / vh > aspect) vh = vw / aspect; else vw = vh * aspect;
+    this.v = { x: cx - vw / 2, y: cy - vh / 2, w: vw, h: vh };
+    this.clamp(); this.apply();
+  }
+  bind() {
+    const pts = new Map();
+    let last = null;
+    const svg = this.svg;
+    svg.addEventListener("pointerdown", e => {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.moved = false; last = null;
+    });
+    svg.addEventListener("pointermove", e => {
+      if (!pts.has(e.pointerId)) return;
+      if (this.o.gate && e.pointerType === "touch" && !this.host.classList.contains("live")) return;
+      const prev = pts.get(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const k = this.scale();
+      if (pts.size === 1) {
+        const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+        if (!this.moved && Math.abs(dx) + Math.abs(dy) > 2) { this.moved = true; svg.classList.add("dragging"); try { svg.setPointerCapture(e.pointerId); } catch (err) {} }
+        this.v.x -= dx / k; this.v.y -= dy / k; this.clamp(); this.apply();
+      } else if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const r = this.host.getBoundingClientRect();
+        if (last) this.zoomAt(last / d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+        last = d; this.moved = true;
+      }
+    });
+    const up = e => {
+      if (this.o.gate && e.type === "pointerup" && e.pointerType === "touch" && !this.moved) this.host.classList.add("live");
+      pts.delete(e.pointerId); last = null; if (!pts.size) svg.classList.remove("dragging");
+    };
+    svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
+    svg.addEventListener("dblclick", e => { const r = this.host.getBoundingClientRect(); this.zoomAt(0.5, e.clientX - r.left, e.clientY - r.top); });
+    if (this.o.wheel) svg.addEventListener("wheel", e => {
+      e.preventDefault();
+      const r = this.host.getBoundingClientRect();
+      this.zoomAt(Math.exp(e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+  }
+}
+
+// ---------- state
+const state = { projects: [], meta: null, region: null, f: { st: "all", status: "current", county: "", q: "", sort: "end" } };
+let FKEY = "rwt.filters";
+function loadF() { try { Object.assign(state.f, JSON.parse(localStorage.getItem(FKEY) || "{}")); } catch (e) {} }
+function saveF() { try { localStorage.setItem(FKEY, JSON.stringify(state.f)); } catch (e) {} }
+// agencies come from data/region.json; each gets a colour variable --a0, --a1, ...
+let AGENCIES = [];
+function agencyOf(p) { return AGENCIES.find(a => a.label === p.source) || { label: p.source, i: -1, mapName: (p.source || "Agency") + " map" }; }
+function agencyColor(p) { const a = agencyOf(p); return a.i >= 0 ? `var(--a${a.i})` : "var(--mo)"; }
+
+const IMPACT_RANK = { closed: 0, high: 1, medium: 2, low: 3, future: 4 };
+function dashFor(p) { return p.reportOnly ? "dot" : statusOf(p) === "upcoming"; }
+function sourceCount(p) {
+  const names = new Set((p.sources || []).map(x => x.name));
+  for (const u of p.updates || []) names.add(u.agency + "|" + (u.kind || "news"));
+  return names.size;
+}
+function colorFor(p) {
+  if (p.reportOnly) return "var(--report)";
+  const st = statusOf(p);
+  if (p.fullClosure && st !== "upcoming") return "var(--closed)";
+  if (st === "upcoming") return "var(--plan)";
+  return agencyColor(p);
+}
+function titleOf(p) {
+  const road = p.route || p.roadName || "State route";
+  return { road, dir: p.direction && p.direction !== "Both directions" ? p.direction : (p.direction || "") };
+}
+function matches(p) {
+  const f = state.f, st = statusOf(p);
+  if (f.st !== "all" && p.source !== f.st) return false;
+  if (f.county && !(p.counties || []).includes(f.county)) return false;
+  switch (f.status) {
+    case "current": if (st === "ended") return false; break;
+    case "active": if (st !== "active") return false; break;
+    case "upcoming": if (st !== "upcoming") return false; break;
+    case "closed": if (!p.fullClosure || st === "ended") return false; break;
+    case "new": if (!isNew(p)) return false; break;
+    case "week-start": if (!inWeek(pd(p.startDate))) return false; break;
+    case "week-end": if (!inWeek(pd(p.endDate)) || st === "ended") return false; break;
+    case "ended": if (st !== "ended") return false; break;
+  }
+  if (f.q) {
+    const hay = [p.route, p.roadName, p.aka, p.location, p.nearTown, p.description, p.workType, (p.counties || []).join(" "), p.detour, p.contractor, p.jobNumber,
+      (p.zones || []).map(z => z.route + " " + z.location).join(" ")].join(" ").toLowerCase();
+    if (!f.q.toLowerCase().split(/\s+/).every(w => hay.includes(w))) return false;
+  }
+  return true;
+}
+function sorter(a, b) {
+  const f = state.f.sort;
+  const far = "9999-12-31";
+  if (f === "start") return (a.startDate || far).localeCompare(b.startDate || far);
+  if (f === "impact") return (IMPACT_RANK[a.impactLevel] ?? 5) - (IMPACT_RANK[b.impactLevel] ?? 5) || (a.endDate || far).localeCompare(b.endDate || far);
+  if (f === "route") return (a.route || "").localeCompare(b.route || "", "en", { numeric: true });
+  const ae = statusOf(a) === "upcoming" ? far : (a.endDate || far), be = statusOf(b) === "upcoming" ? far : (b.endDate || far);
+  return ae.localeCompare(be) || (a.startDate || far).localeCompare(b.startDate || far);
+}
+
+// ---------- header + stats
+function renderFresh(msg) {
+  const el = $("#fresh"); el.textContent = "";
+  if (msg) { el.append(h("span", { class: "warn", text: msg })); return; }
+  const m = state.meta;
+  if (!m || !m.lastRefresh) { el.textContent = "Waiting for the first data load"; return; }
+  el.append("Updated ", h("b", { text: fmtTime.format(new Date(m.lastRefresh)) }));
+  const staleDays = Math.floor((Date.now() - new Date(m.lastRefresh)) / 3600000 / 24);
+  if (Date.now() - new Date(m.lastRefresh) > 36 * 3600000) el.append(h("br"), h("span", { class: "warn", text: `Data is ${staleDays} day${staleDays === 1 ? "" : "s"} old; the scheduled refresh hasn't run` }));
+  const bad = Object.entries(m.sources || {}).filter(([, v]) => !v.ok).map(([k, v]) => v.label || k);
+  if (bad.length) el.append(h("br"), h("span", { class: "warn", text: `${bad.join(" and ")} feed didn't respond last check` }));
+}
+function renderStats() {
+  const ps = state.projects, live = ps.filter(p => statusOf(p) !== "ended");
+  const defs = [
+    ["active", "Active now", live.filter(p => statusOf(p) === "active").length, "active"],
+    ["closed", "Road closures", live.filter(p => p.fullClosure).length, "closure"],
+    ["new", "New this week", ps.filter(isNew).length, ""],
+    ["week-start", "Start this week", ps.filter(p => inWeek(pd(p.startDate))).length, ""],
+    ["week-end", "End this week", live.filter(p => inWeek(pd(p.endDate))).length, ""],
+    ["upcoming", "Starting later", live.filter(p => statusOf(p) === "upcoming").length, ""],
+  ];
+  const el = $("#stats"); el.textContent = "";
+  for (const [key, lab, n, cls] of defs) {
+    el.append(h("button", { type: "button", class: "stat " + cls, "aria-pressed": state.f.status === key ? "true" : "false",
+      onclick: () => { state.f.status = state.f.status === key ? "current" : key; $("#f-status").value = state.f.status; saveF(); renderStats(); renderList(); } },
+      h("span", { class: "num", text: n }), h("span", { class: "lab", text: lab })));
+  }
+}
+
+// ---------- overview map
+let overview = null, tip = null;
+function llExt(b) { const a = merc(b[0], b[1]), c = merc(b[2], b[3]); return [a[0], a[1], c[0], c[1]]; }
+function renderOverview() {
+  const host = $("#overview"), reg = state.region;
+  if (!reg) return;
+  const ext = llExt(reg.bbox), homeExt = llExt(reg.home || reg.bbox);
+  const vis = state.projects.filter(matches);
+  const feats = vis.map(p => ({
+    id: p.id, segments: p.segments || [], color: colorFor(p), width: 4, mark: 6, dash: dashFor(p),
+    onClick: () => openCard(p.id),
+    onHover: (e, on) => showTip(p, e, on),
+  }));
+  if (!overview) {
+    overview = new MapView(host, { extent: homeExt, bounds: ext, wheel: true, gate: true, maxZoom: 40, label: "Map of all work zones", features: feats });
+    tip = h("div", { class: "tip", hidden: true }); host.append(tip);
+  } else overview.drawFeatures(feats);
+}
+function showTip(p, e, on) {
+  if (!tip) return;
+  if (!on) { tip.hidden = true; return; }
+  const t = titleOf(p);
+  tip.textContent = "";
+  tip.append(h("b", { text: t.road + (t.dir ? " " + t.dir.toLowerCase() : "") }), p.location || (p.counties || []).join(", "));
+  const r = $("#overview").getBoundingClientRect();
+  tip.hidden = false;
+  const x = Math.min(e.clientX - r.left + 12, r.width - 270), y = Math.max(e.clientY - r.top - 50, 6);
+  tip.style.left = Math.max(6, x) + "px"; tip.style.top = y + "px";
+}
+function openCard(id) {
+  const p = state.projects.find(x => x.id === id);
+  if (p && !matches(p)) { state.f.status = "all"; state.f.q = ""; state.f.county = ""; state.f.st = "all"; syncControls(); renderStats(); renderList(); }
+  const el = document.getElementById("p-" + id);
+  if (!el) return;
+  try { history.replaceState(null, "", "#p-" + id); } catch (e) {}
+  el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+}
+
+// ---------- news
+let newsAll = false;
+const NEWS_OTHER = /meeting|ribbon|celebrat|comment|advisory|invited|hearing|open house|award/i;
+function renderNews() {
+  const n = state.meta && state.meta.news, sec = $("#news-sec"), box = $("#news"), more = $("#news-more");
+  // roadwork first, then meetings and ceremonies; each group newest first (stored order)
+  const isOther = it => it.topic ? it.topic !== "roadwork" : NEWS_OTHER.test(it.title || "") && !(it.projectIds || []).length;
+  const all = (n && n.items) || [];
+  const items = [...all.filter(it => !isOther(it)), ...all.filter(isOther)];
+  sec.hidden = !items.length;
+  box.textContent = "";
+  for (const it of newsAll ? items : items.slice(0, 6)) {
+    const ps = (it.projectIds || []).map(id => state.projects.find(x => x.id === id)).filter(Boolean);
+    box.append(h("div", { class: "item" + (isOther(it) ? " other" : "") },
+      h("span", { class: "meta", text: [it.agency, it.date ? fmtShort.format(pd(it.date.slice(0, 10))) : ""].filter(Boolean).join(" · ") }),
+      h("a", { class: "t", href: it.url, target: "_blank", rel: "noopener", text: it.title || "Update" }),
+      it.summary ? h("span", { class: "s", text: it.summary }) : null,
+      it.vsFeed && ps.length ? h("span", { class: "vs", text: it.vsFeed }) : null,
+      ps.length ? h("div", { class: "chips" }, ps.slice(0, 4).map(x => h("button", { type: "button", class: "chip", title: "Open this project", text: (x.route || "Project") + (x.nearTown ? " · " + x.nearTown : ""), onclick: () => openCard(x.id) })),
+        ps.length > 4 ? h("span", { class: "meta", text: `+${ps.length - 4} more` }) : null) : null));
+  }
+  more.hidden = items.length <= 6;
+  more.textContent = newsAll ? "Show fewer" : `Show all ${items.length}`;
+  more.onclick = () => { newsAll = !newsAll; renderNews(); };
+  $("#news-checked").textContent = n && n.checked ? "Checked " + fmtTime.format(new Date(n.checked)) : "";
+}
+
+// ---------- cards
+let reportRefs = new Map();
+const lazy = new IntersectionObserver(entries => {
+  for (const en of entries) if (en.isIntersecting) { lazy.unobserve(en.target); en.target._init?.(); }
+}, { rootMargin: "300px" });
+
+function dateBlock(p) {
+  const st = pd(p.startDate), en = pd(p.endDate), status = statusOf(p);
+  let note = "";
+  if (status === "upcoming" && st) { const d = days(TODAY, st); note = d === 1 ? "Starts tomorrow" : `Starts in ${d} days`; }
+  else if (status === "ended") note = en ? `Finished ${fmtShort.format(en)}` : "No longer listed";
+  else if (p.stillReported && en) note = `${days(en, TODAY)} days past its posted end, still reported`;
+  else if (st && en) { const tot = Math.max(days(st, en), 1), done = Math.min(days(st, TODAY), tot), left = days(TODAY, en); note = left === 0 ? "Ends today" : `Day ${done + 1} of ${tot + 1} · ${left} days left`; }
+  else if (en) { const left = days(TODAY, en); note = left === 0 ? "Ends today" : `${left} days left`; }
+  else note = "End date not posted";
+  const wrap = h("div", { class: "dates" },
+    h("div", { class: "row" },
+      h("time", { datetime: p.startDate || "", text: st ? fmtD.format(st) : "Start not posted" }),
+      h("span", { text: "→" }),
+      h("time", { datetime: p.endDate || "", text: en ? fmtD.format(en) : "End not posted" })));
+  if (st && en && en > st) {
+    const frac = Math.min(Math.max((TODAY - st) / (en - st), 0), 1);
+    const bar = h("div", { class: "bar", role: "img", "aria-label": note },
+      h("div", { class: "fill" + (status === "ended" ? " done" : ""), style: `width:${(frac * 100).toFixed(1)}%` }));
+    if (frac > 0 && frac < 1) bar.append(h("div", { class: "today", style: `left:calc(${(frac * 100).toFixed(1)}% - 1px)` }));
+    wrap.append(bar);
+  }
+  wrap.append(h("div", { class: "row" }, h("span", { text: note })));
+  return wrap;
+}
+
+function card(p) {
+  const t = titleOf(p), status = statusOf(p);
+  const mapHost = h("div", { class: "map", "aria-label": "Map of the work zone" });
+  mapHost._init = () => {
+    const ext = (() => {
+      const b = p.bbox || state.region.bbox; const a = merc(b[0], b[1]), c = merc(b[2], b[3]);
+      const w = Math.max(c[0] - a[0], 1600) * 1.7, hh = w / 1.6, cx = (a[0] + c[0]) / 2, cy = (a[1] + c[1]) / 2;
+      return [cx - w / 2, cy - hh / 2, cx + w / 2, cy + hh / 2];
+    })();
+    new MapView(mapHost, { extent: ext, bounds: ext, maxZoom: 6, label: `Map of ${t.road} work zone`,
+      features: [{ id: p.id, segments: p.segments || [], color: colorFor(p), width: 6, mark: 9, dash: dashFor(p) }] });
+  };
+  lazy.observe(mapHost);
+
+  const tags = h("div", { class: "tags" },
+    h("span", { class: "tag ag", style: `--ag:${agencyColor(p)}`, text: p.source }),
+    h("span", { class: "tag " + status, text: { active: "Active", upcoming: "Starts later", ended: "Finished" }[status] }),
+    isNew(p) ? h("span", { class: "tag new", title: "First listed " + fmtShort.format(new Date(p.firstSeen)), text: "New" }) : null,
+    p.stillReported ? h("span", { class: "tag closed", title: `Past its posted end date but still listed in ${p.source}'s live traffic reports`, text: "Past end date" }) : null,
+    p.liveReport ? h("span", { class: "tag", title: `From ${p.source}'s live traffic reports, which don't post end dates`, text: "Live report" }) : null,
+    p.reportOnly ? h("span", { class: "tag report", title: "Not in any agency data feed; reported only in agency news or social posts", text: "News/social only" }) : null,
+    (() => { const n = sourceCount(p); return h("span", { class: "tag count", text: n === 1 ? "1 source" : n + " sources" }); })(),
+    p.fullClosure && status !== "ended" ? h("span", { class: "tag closed", text: "Road closed" }) :
+      (p.impact && p.impactLevel !== "future" ? h("span", { class: "tag", text: p.impact }) : null));
+
+  const where = [p.aka, p.location, p.nearTown && !String(p.location || "").includes(p.nearTown) ? "near " + p.nearTown : "", (p.counties || []).map(c => c + (/city/i.test(c) ? "" : " Co.")).join(", ")].filter(Boolean).join(" · ");
+  const facts = h("dl", { class: "facts" });
+  const addFact = (k, v) => { if (v) facts.append(h("dt", { text: k }), h("dd", { text: v })); };
+  addFact("Work", p.workType);
+  addFact("Lanes", p.lanesClosed && !/^0$/.test(p.lanesClosed) ? (/^\d+$/.test(p.lanesClosed) ? `${p.lanesClosed} closed` : p.lanesClosed) : "");
+  addFact("Hours", p.hours);
+  addFact("Detour", p.detour);
+  addFact("Restriction", p.restriction);
+  addFact("Speed", p.speedLimit ? p.speedLimit + (/mph/i.test(p.speedLimit) ? "" : " mph") : "");
+  addFact("Contractor", p.contractor);
+  addFact("Job no.", p.jobNumber);
+
+  const KIND = { feed: "Data feed", news: "News release", social: "Social post" };
+  const srcRows = [];
+  for (const x of p.sources || []) {
+    if (x.kind === "feed") srcRows.push(h("div", { class: "src" },
+      h("span", { class: "k", text: [KIND.feed, x.date ? "since " + fmtShort.format(pd(x.date.slice(0, 10))) : ""].filter(Boolean).join(" · ") }),
+      h("span", { text: x.summary ? `${x.name}: ${x.summary}` : x.name })));
+    else srcRows.push(h("div", { class: "src" },
+      h("span", { class: "k", text: [KIND[x.kind] || "Report", x.name, x.date ? fmtShort.format(pd(x.date.slice(0, 10))) : ""].filter(Boolean).join(" · ") }),
+      x.url ? h("a", { href: x.url, target: "_blank", rel: "noopener", text: x.summary || x.url }) : h("span", { text: x.summary || "" })));
+  }
+  for (const u of (p.updates || []).slice(0, 4)) srcRows.push(h("div", { class: "src" },
+    h("span", { class: "k", text: [KIND[u.kind] || KIND.news, u.agency, u.date ? fmtShort.format(pd(u.date.slice(0, 10))) : ""].filter(Boolean).join(" · ") }),
+    h("a", { href: u.url, target: "_blank", rel: "noopener", text: u.title || u.summary || "Update" }),
+    u.vsFeed ? h("span", { class: "vs", text: u.vsFeed }) : null));
+  const relIds = p.reportOnly ? (p.relatedIds || []) : (reportRefs.get(p.id) || []);
+  const rel = relIds.map(id => state.projects.find(x => x.id === id)).filter(Boolean);
+  const relBlock = rel.length ? h("p", { class: "rel" }, p.reportOnly ? "Feed entries nearby: " : "Also reported in news/social: ",
+    rel.map((x, i) => [i ? ", " : "", h("button", { type: "button", text: (x.route || "") + (x.location ? " · " + x.location : ""), onclick: () => openCard(x.id) })])) : null;
+  const updates = srcRows.length ? h("div", { class: "srcs" }, h("h4", { text: "Sources" }), srcRows, relBlock) : relBlock;
+
+  return h("article", { class: "card", id: "p-" + p.id },
+    mapHost,
+    h("div", { class: "body" },
+      tags,
+      h("div", { class: "plate" },
+        h("span", { class: "route", text: t.road }),
+        h("h3", { text: t.dir || (p.roadName && p.roadName !== t.road ? p.roadName : "Work zone") })),
+      where ? h("p", { class: "where", text: where }) : null,
+      h("p", { class: "desc", text: p.description || "" }),
+      p.stillReported ? h("p", { class: "src vs", text: `Posted end was ${fmtD.format(pd(p.postedEnd))}, but ${p.source}'s live traffic reports still list this work` + (p.liveReportSince ? ` (reported since ${fmtShort.format(pd(p.liveReportSince))}).` : ".") }) : null,
+      dateBlock(p),
+      facts.childNodes.length ? facts : null,
+      (p.zones || []).length ? h("details", { class: "zones" },
+        h("summary", { text: `${p.zones.length} work zones in this job` }),
+        h("ul", {}, p.zones.map(z => h("li", {}, h("b", { text: z.route }), " ",
+          [z.direction && z.direction !== "Both directions" ? z.direction.toLowerCase() : "", z.location,
+           /^[1-9]\d*$/.test(z.lanesClosed) ? `${z.lanesClosed} lane${z.lanesClosed === "1" ? "" : "s"} closed` : ""].filter(Boolean).join(" · "))))) : null,
+      updates,
+      h("div", { class: "links" },
+        h("button", { type: "button", text: "Show on area map", onclick: () => {
+          const b = p.bbox; if (!b || !overview) return;
+          const a = merc(b[0], b[1]), c = merc(b[2], b[3]);
+          $("#overview").scrollIntoView({ behavior: "smooth", block: "center" });
+          overview.fit([a[0], a[1], c[0], c[1]], 1.2);
+        } }),
+        h("a", { href: p.sourceUrl || "#", target: "_blank", rel: "noopener", text: p.reportOnly ? "Original post" : agencyOf(p).mapName }))));
+}
+
+function renderList() {
+  const grid = $("#grid");
+  const vis = state.projects.filter(matches).sort(sorter);
+  $("#count").textContent = `${vis.length} of ${state.projects.length} projects`;
+  for (const m of grid.querySelectorAll(".map")) { RO.unobserve(m); lazy.unobserve(m); }
+  reportRefs = new Map();
+  for (const x of state.projects) if (x.reportOnly) for (const id of x.relatedIds || []) {
+    if (!reportRefs.has(id)) reportRefs.set(id, []);
+    reportRefs.get(id).push(x.id);
+  }
+  grid.textContent = "";
+  if (!state.projects.length) {
+    grid.append(h("div", { class: "empty" }, h("h3", { text: "No projects loaded yet" }),
+      h("p", { text: "The tracker fills in after its first scheduled refresh pulls the agency feeds. Projects, maps and dates appear here automatically." })));
+  } else if (!vis.length) {
+    grid.append(h("div", { class: "empty" }, h("h3", { text: "Nothing matches these filters" }),
+      h("p", {}, "Try another county or status, or ", h("button", { type: "button", class: "linkbtn", text: "clear the filters", onclick: clearFilters, style: "font:inherit;color:var(--mo);background:none;border:0;padding:0;text-decoration:underline;cursor:pointer" }), ".")));
+  } else for (const p of vis) grid.append(card(p));
+  renderOverview();
+}
+function clearFilters() { Object.assign(state.f, { st: "all", status: "current", county: "", q: "" }); syncControls(); saveF(); renderStats(); renderList(); }
+
+function syncControls() {
+  for (const b of document.querySelectorAll("#f-agency button")) b.setAttribute("aria-pressed", b.dataset.state === state.f.st ? "true" : "false");
+  $("#f-status").value = state.f.status; $("#f-sort").value = state.f.sort; $("#f-q").value = state.f.q;
+  const sel = $("#f-county"), cur = state.f.county;
+  const counties = [...new Set(state.projects.flatMap(p => p.counties || []))].sort();
+  sel.textContent = "";
+  sel.append(h("option", { value: "", text: "All counties" }));
+  for (const c of counties) sel.append(h("option", { value: c, text: c }));
+  sel.value = counties.includes(cur) ? cur : "";
+  sel.hidden = !counties.length;
+}
+
+// controls
+$("#f-status").addEventListener("change", e => { state.f.status = e.target.value; saveF(); renderStats(); renderList(); });
+$("#f-county").addEventListener("change", e => { state.f.county = e.target.value; saveF(); renderList(); });
+$("#f-sort").addEventListener("change", e => { state.f.sort = e.target.value; saveF(); renderList(); });
+let qt; $("#f-q").addEventListener("input", e => { clearTimeout(qt); qt = setTimeout(() => { state.f.q = e.target.value.trim(); saveF(); renderList(); }, 180); });
+const setHdr = () => document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");
+new ResizeObserver(setHdr).observe($("header.top")); setHdr();
+
+syncControls(); renderStats();
+
+// ---------- data
+let firstHash = location.hash.startsWith("#p-") ? location.hash.slice(3) : null;
+let rTimer = null;
+const scheduleRender = () => { clearTimeout(rTimer); rTimer = setTimeout(() => { syncControls(); renderStats(); renderList(); renderFresh(); renderNews(); if (firstHash) { const id = firstHash; firstHash = null; setTimeout(() => openCard(id), 300); } }, 60); };
+
+function applyRegion(reg) {
+  state.region = reg;
+  TILE = { ...TILE, url: reg.map?.tiles || TILE.url, attribution: reg.map?.attribution || TILE.attribution,
+           maxZoom: reg.map?.maxZoom || TILE.maxZoom, subdomains: reg.map?.subdomains || TILE.subdomains };
+  FKEY = `rwt.${reg.id || "region"}.filters`; loadF();
+  document.title = reg.title || "Road Work Tracker";
+  $("#r-title").textContent = reg.title || "Road Work";
+  $("#r-sub").textContent = reg.subtitle || "";
+  if (reg.newsTitle) $("#news-h").textContent = reg.newsTitle;
+  if (reg.footer) $("#r-footer").textContent = reg.footer;
+  const credit = $("#r-credit"); credit.innerHTML = "Map: " + TILE.attribution;
+  AGENCIES = (reg.agencies || []).map((a, i) => ({ ...a, i }));
+  const css = AGENCIES.map(a => `--a${a.i}:${a.color}`).join(";"), dark = AGENCIES.map(a => `--a${a.i}:${a.darkColor || a.color}`).join(";");
+  $("#agency-colors").textContent = `:root{${css}} @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${dark}}} :root[data-theme="dark"]{${dark}}`;
+  const legend = $("#legend");
+  legend.prepend(...AGENCIES.map(a => h("span", {}, h("i", { style: `color:var(--a${a.i})` }), a.label)));
+  const seg = $("#f-agency");
+  seg.textContent = "";
+  if (AGENCIES.length > 1) {
+    seg.hidden = false;
+    for (const [val, lab] of [["all", "All"], ...AGENCIES.map(a => [a.label, a.state || a.label])])
+      seg.append(h("button", { type: "button", "data-state": val, "aria-pressed": "false", text: lab,
+        onclick: () => { state.f.st = val; syncControls(); saveF(); renderList(); } }));
+  }
+  if (state.f.st !== "all" && !AGENCIES.some(a => a.label === state.f.st)) state.f.st = "all";
+}
+
+async function getJSON(name) {
+  const r = await fetch(`data/${name}?t=${Date.now()}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
+  return r.json();
+}
+let lastRefresh = null;
+async function load() {
+  const [status, data] = await Promise.all([getJSON("status.json"), lastRefresh ? null : getJSON("projects.json")]);
+  if (lastRefresh && status.lastRefresh === lastRefresh) return;
+  state.meta = status;
+  state.projects = (data || await getJSON("projects.json")).projects || [];
+  lastRefresh = status.lastRefresh;
+  scheduleRender();
+  renderOverview();
+}
+(async () => {
+  try {
+    applyRegion(await getJSON("region.json"));
+    syncControls(); renderStats(); renderOverview();
+    await load();
+  } catch (e) {
+    renderFresh("Couldn't load the data files");
+    $("#grid").textContent = "";
+    $("#grid").append(h("div", { class: "empty" }, h("h3", { text: "No data yet" }),
+      h("p", { text: "Run the pipeline (python -m tracker run --config config/regions/<region>.json) so site/data/ has region.json, projects.json and status.json, then serve the site folder over HTTP." })));
+    return;
+  }
+  // pick up the next scheduled refresh without a reload
+  setInterval(() => { if (!document.hidden) load().catch(() => {}); }, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) load().catch(() => {}); });
+})();
+})();
+</script>
+</body>
+</html>

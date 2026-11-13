@@ -1,0 +1,70 @@
+name: Refresh data and publish
+
+on:
+  schedule:
+    - cron: "17 11 * * *"     # daily, 11:17 UTC (about 5-6 AM US Central). Edit to taste.
+  workflow_dispatch:          # "Run workflow" button
+  push:
+    branches: [main]
+    paths: ["site/**", "config/**", "tracker/**"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      REGION: ${{ vars.REGION }}   # set under Settings > Secrets and variables > Actions > Variables
+      # API keys for feeds that need one: add them as repository secrets and reference them in the
+      # config as "${NAME}". Example:
+      # STATE_WZDX_KEY: ${{ secrets.STATE_WZDX_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore feed cache
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: feeds-${{ vars.REGION }}-${{ github.run_id }}
+          restore-keys: feeds-${{ vars.REGION }}-
+
+      - name: Tests
+        run: python -m unittest discover tests
+
+      - name: Check REGION
+        if: env.REGION == ''
+        run: echo "::warning::Set the REGION repository variable to your config's id (config/regions/<id>.json). Skipping the data refresh."
+
+      - name: Refresh data
+        if: github.event_name != 'push' && env.REGION != ''
+        run: python -m tracker run --config config/regions/${REGION}.json --out site/data
+
+      - name: Commit data
+        if: github.event_name != 'push' && env.REGION != ''
+        run: |
+          git config user.name "road-work-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/data
+          git diff --cached --quiet || git commit -m "Data refresh $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

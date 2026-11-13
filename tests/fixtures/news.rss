@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Example DOT newsroom</title>
+<item><title>Lane closures on I-35 near Example Creek</title><link>https://news.example.gov/i35-lanes</link>
+<pubDate>Tue, 10 Nov 2026 14:00:00 -0600</pubDate>
+<description>&lt;p&gt;Northbound I-35 will narrow to one lane between Main St and Oak Ave for bridge deck repair.&lt;/p&gt;</description></item>
+<item><title>Ribbon cutting for new interchange</title><link>https://news.example.gov/ribbon</link>
+<pubDate>Wed, 11 Nov 2026 09:00:00 -0600</pubDate><description>Officials will celebrate.</description></item>
+<item><title>Statewide hiring event</title><link>https://news.example.gov/jobs</link>
+<pubDate>Wed, 11 Nov 2026 09:00:00 -0600</pubDate><description>Somewhere else entirely.</description></item>
+</channel></rss>
