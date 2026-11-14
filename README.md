@@ -70,7 +70,7 @@ python -m unittest discover tests                              # offline tests
 2. In **Settings → Pages**, set **Source** to **GitHub Actions**.
 3. In **Settings → Secrets and variables → Actions → Variables**, add `REGION` = your config's id (the file name without `.json`). Until it's set, the workflow publishes the site but skips the data refresh.
 4. If a feed needs an API key, add it under **Secrets** and pass it through in `.github/workflows/refresh.yml` (see the comment there). Reference it in the config as `"${NAME}"`.
-5. Run the **Refresh data and publish** workflow once from the Actions tab. After that it runs daily, commits the new `site/data/*.json`, and redeploys.
+5. Run the **Refresh data and publish** workflow once from the Actions tab. Scheduled runs are off by default (uncomment the `schedule:` block in `.github/workflows/refresh.yml` to run it daily); each run commits the new `site/data/*.json`, and redeploys.
 
 Any static host works too (Netlify, Cloudflare Pages, S3): publish the `site/` folder and run the pipeline on a schedule.
 
